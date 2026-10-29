@@ -1,0 +1,19 @@
+# Local configuration and runtime data
+helper-config.json
+diagnostics/
+test-results/
+analysis/
+templates/
+# Build outputs and local backups (publish binaries through Releases)
+*.exe
+*.exe.bak
+*.dll
+*.pdb
+*.zip
+dist/
+*.log
+*.tmp
+.vs/
+.vscode/
+Thumbs.db
+Desktop.ini
