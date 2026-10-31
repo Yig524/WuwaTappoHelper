@@ -23,7 +23,7 @@
 
 ## 快速开始
 
-系统要求：Windows 10/11、Windows PowerShell 5.1、.NET Framework 4.8。官方 WuwaTappo 需自行安装并登录；当前适配并校验的是官方 **1.0.2**。
+系统要求：Windows 10/11、Windows PowerShell 5.1、.NET Framework 4.8。官方 WuwaTappo 需自行安装并登录；当前适配并校验的是官方 **1.0.2 / 1.0.3**。
 
 1. **解压整个发布包。** 找到含 `WuwaTappoHelper.exe` 的目录；也可先双击其中的 `开始使用.html` 查看离线指引。
 2. **完成首次使用向导。** 点击“选择程序…”选中官方 `WuwaTappo.exe`，校验版本并只读检查连接；最后保存路径、进入主界面。暂未登录时可选择“稍后连接”。无需手动编辑JSON。[向导与高级配置](docs/INSTALL.md#第二步完成首次使用向导)

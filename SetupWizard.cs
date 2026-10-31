@@ -38,9 +38,16 @@ namespace TappoHelper {
                 if(String.IsNullOrWhiteSpace(selectedPath)||!File.Exists(selectedPath))return new ExecutableCheck{Message="找不到文件。请选择已经安装的官方 WuwaTappo.exe。"};
                 if(!String.Equals(Path.GetFileName(selectedPath),"WuwaTappo.exe",StringComparison.OrdinalIgnoreCase))return new ExecutableCheck{Message="请选择官方 WuwaTappo.exe，不要选择助手、卸载程序或快捷方式。"};
                 string hash;using(SHA256 sha=SHA256.Create())using(FileStream file=File.OpenRead(selectedPath))hash=BitConverter.ToString(sha.ComputeHash(file)).Replace("-","");
-                bool valid=hash=="099B62BE14EFE2CC99BB0AD3D37860488C42FB0F4E6282B5687E6335AB178573";
-                return new ExecutableCheck{Compatible=valid,Message=valid?"兼容性校验通过：已核对的官方 1.0.2。":"文件与当前适配版本不一致。暂不支持此版本，请等待适配；不会跳过校验。"};
+                string version=OfficialVersionForHash(hash);bool valid=version!=null;
+                return new ExecutableCheck{Compatible=valid,Message=valid?"兼容性校验通过：已核对的官方 "+version+"。":"文件与当前适配版本不一致。暂不支持此版本，请等待适配；不会跳过校验。"};
             }catch(Exception error){return new ExecutableCheck{Message="无法读取所选文件："+error.Message};}
+        }
+        public static string OfficialVersionForHash(string hash){
+            switch(hash){
+                case "099B62BE14EFE2CC99BB0AD3D37860488C42FB0F4E6282B5687E6335AB178573":return "1.0.2";
+                case "CEDC37D0C11D112F4D933647FB6CF00E1DCA847FC763250984C647080F849080":return "1.0.3";
+                default:return null;
+            }
         }
         public void SetValidation(ExecutableCheck check){PathValidated=check.Compatible;feedback.Text=check.Message;feedback.ForeColor=check.Compatible?Palette.Green:Color.FromArgb(171,67,56);}
         public void SetConnection(bool ready,string message){ConnectionReady=ready;if(Stage==1){feedback.Text=message;feedback.ForeColor=ready?Palette.Green:Palette.Muted;next.Enabled=ready;}}

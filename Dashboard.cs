@@ -6,9 +6,10 @@ namespace TappoHelper {
         public static GraphicsPath Shape(RectangleF r,float radius){float d=radius*2;GraphicsPath p=new GraphicsPath();p.AddArc(r.Left,r.Top,d,d,180,90);p.AddArc(r.Right-d,r.Top,d,d,270,90);p.AddArc(r.Right-d,r.Bottom-d,d,d,0,90);p.AddArc(r.Left,r.Bottom-d,d,d,90,90);p.CloseFigure();return p;}
     }
     public sealed class Surface:Panel {
-        public Surface(){DoubleBuffered=true;BackColor=Color.White;Padding=new Padding(20);}
+        public Surface(){DoubleBuffered=true;ResizeRedraw=true;BackColor=Color.White;Padding=new Padding(20);}
         protected override void OnPaintBackground(PaintEventArgs e){e.Graphics.Clear(Palette.ParentColor(this));e.Graphics.SmoothingMode=SmoothingMode.AntiAlias;float r=16*e.Graphics.DpiX/96;using(GraphicsPath p=Palette.Shape(new RectangleF(.5f,.5f,Width-1,Height-1),r)){using(SolidBrush b=new SolidBrush(BackColor))e.Graphics.FillPath(b,p);using(Pen pen=new Pen(Palette.Line))e.Graphics.DrawPath(pen,p);}}
     }
+    public sealed class BufferedGrid:TableLayoutPanel { public BufferedGrid(){DoubleBuffered=true;ResizeRedraw=true;BackColor=Color.White;} }
     public sealed class SoftButton:Button {
         bool hover,pressed;public bool Primary{get;set;}public bool Destructive{get;set;}
         public SoftButton(){FlatStyle=FlatStyle.Flat;FlatAppearance.BorderSize=0;Cursor=Cursors.Hand;DoubleBuffered=true;UseVisualStyleBackColor=false;Height=40;}
@@ -46,8 +47,8 @@ namespace TappoHelper {
         readonly Label leftValue,rightValue,leftDetail,rightDetail;readonly StatusPill pill;readonly Form owner;readonly List<Font> fonts=new List<Font>();readonly Image brandImage;readonly Icon brandIcon;
         [DllImport("dwmapi.dll")]static extern int DwmSetWindowAttribute(IntPtr h,int attr,ref int value,int size);
         Font Face(float size,FontStyle style=FontStyle.Regular){Font f=new Font("Microsoft YaHei UI",size,style,GraphicsUnit.Point);fonts.Add(f);return f;}
-        Label Text(string text,float size,Color color,FontStyle style=FontStyle.Regular){return new Label{Text=text,AutoSize=false,ForeColor=color,BackColor=Color.Transparent,Font=Face(size,style),TextAlign=ContentAlignment.MiddleLeft,Margin=Padding.Empty,Dock=DockStyle.Fill};}
-        TableLayoutPanel Grid(int columns){TableLayoutPanel p=new TableLayoutPanel{ColumnCount=columns,RowCount=1,Dock=DockStyle.Fill,BackColor=Color.Transparent,Margin=Padding.Empty,Padding=Padding.Empty};p.RowStyles.Add(new RowStyle(SizeType.Percent,100));return p;}
+        Label Text(string text,float size,Color color,FontStyle style=FontStyle.Regular){return new Label{Text=text,AutoSize=false,ForeColor=color,BackColor=Color.White,Font=Face(size,style),TextAlign=ContentAlignment.MiddleLeft,Margin=Padding.Empty,Dock=DockStyle.Fill};}
+        TableLayoutPanel Grid(int columns){TableLayoutPanel p=new BufferedGrid{ColumnCount=columns,RowCount=1,Dock=DockStyle.Fill,BackColor=Color.White,Margin=Padding.Empty,Padding=Padding.Empty};p.RowStyles.Add(new RowStyle(SizeType.Percent,100));return p;}
         SoftButton Button(string text,bool primary=false,bool destructive=false){return new SoftButton{Text=text,Primary=primary,Destructive=destructive,Font=Face(10,FontStyle.Bold),Dock=DockStyle.Fill,Margin=new Padding(0,0,8,0)};}
         Surface Card(){return new Surface{Dock=DockStyle.Fill,Margin=Padding.Empty};}
         static void Row(TableLayoutPanel grid,Control control,int height,int gap=12){int row=grid.RowCount++;grid.RowStyles.Add(new RowStyle(SizeType.Absolute,height));grid.Controls.Add(control,0,row);if(gap>0){grid.RowCount++;grid.RowStyles.Add(new RowStyle(SizeType.Absolute,gap));}}
@@ -62,11 +63,11 @@ namespace TappoHelper {
             header.Controls.Add(new PictureBox{Image=brandImage,SizeMode=PictureBoxSizeMode.Zoom,Dock=DockStyle.Fill,Margin=new Padding(0,0,12,0)},0,0);
             TableLayoutPanel brand=Grid(1);brand.RowCount=2;brand.RowStyles.Clear();brand.RowStyles.Add(new RowStyle(SizeType.Absolute,34));brand.RowStyles.Add(new RowStyle(SizeType.Percent,100));brand.Controls.Add(Text("塔波小助手",19,Palette.Ink,FontStyle.Bold),0,0);brand.Controls.Add(Text("Wuwa Tappo  /  让收获轻松一点",9,Palette.Muted),0,1);header.Controls.Add(brand,1,0);
             pill=new StatusPill{Anchor=AnchorStyles.Right,Font=Face(9,FontStyle.Bold)};pill.SetState("只读待命",Palette.Mint,Palette.Green);header.Controls.Add(pill,2,0);Row(page,header,60,16);
-            TableLayoutPanel overview=Grid(3);overview.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,38));overview.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,31));overview.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,31));
+            TableLayoutPanel overview=Grid(3);overview.BackColor=Palette.Background;overview.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,38));overview.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,31));overview.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,31));
             Surface balanceCard=Card();balanceCard.Margin=new Padding(0,0,12,0);TableLayoutPanel b=Grid(1);b.RowCount=3;b.RowStyles.Clear();b.RowStyles.Add(new RowStyle(SizeType.Absolute,22));b.RowStyles.Add(new RowStyle(SizeType.Percent,100));b.RowStyles.Add(new RowStyle(SizeType.Absolute,20));b.Controls.Add(Text("可用余额",9,Palette.Muted),0,0);Balance=Text("—",28,Palette.Ink,FontStyle.Bold);b.Controls.Add(Balance,0,1);b.Controls.Add(Text("目标储备  2,000",9,Palette.Muted),0,2);balanceCard.Controls.Add(b);overview.Controls.Add(balanceCard,0,0);
             Surface left=SlotCard("左侧箱子",out leftValue,out leftDetail);left.Margin=new Padding(0,0,12,0);overview.Controls.Add(left,1,0);overview.Controls.Add(SlotCard("右侧箱子",out rightValue,out rightDetail),2,0);Row(page,overview,138,8);
             Connection=Text("正在连接桌宠…",9,Palette.Muted);Row(page,Connection,24,12);
-            TableLayoutPanel middle=Grid(2);middle.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,53));middle.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,47));
+            TableLayoutPanel middle=Grid(2);middle.BackColor=Palette.Background;middle.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,53));middle.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,47));
             Surface tasks=Card();tasks.Margin=new Padding(0,0,12,0);TableLayoutPanel taskRows=Grid(1);taskRows.RowCount=4;taskRows.RowStyles.Clear();taskRows.RowStyles.Add(new RowStyle(SizeType.Absolute,28));taskRows.RowStyles.Add(new RowStyle(SizeType.Absolute,59));taskRows.RowStyles.Add(new RowStyle(SizeType.Absolute,59));taskRows.RowStyles.Add(new RowStyle(SizeType.Percent,100));taskRows.Controls.Add(Text("自动任务",11,Palette.Ink,FontStyle.Bold),0,0);
             ToggleSwitch fill,harvest;taskRows.Controls.Add(SwitchRow("自动补充余额","补至 2,000 后休息，输入时自动避让",out fill),0,1);taskRows.Controls.Add(SwitchRow("自动领取箱子","槽位就绪后领取，等待结果确认",out harvest),0,2);Fill=fill;Harvest=harvest;
             TableLayoutPanel actions=Grid(2);actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,65));actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,35));Start=Button("开始运行",true);Stop=Button("停止",false,true);Stop.Margin=Padding.Empty;actions.Controls.Add(Start,0,0);actions.Controls.Add(Stop,1,0);actions.Padding=new Padding(0,8,0,0);taskRows.Controls.Add(actions,0,3);tasks.Controls.Add(taskRows);middle.Controls.Add(tasks,0,0);
