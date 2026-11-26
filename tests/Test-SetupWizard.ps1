@@ -4,16 +4,23 @@ $results=Join-Path (Split-Path $PSScriptRoot) 'test-results'
 [void][IO.Directory]::CreateDirectory($results)
 $fake=Join-Path $results 'WuwaTappo.exe';[IO.File]::WriteAllText($fake,'invalid fixture, not executable')
 try {
-    if([TappoHelper.SetupWizard]::OfficialVersionForHash('099B62BE14EFE2CC99BB0AD3D37860488C42FB0F4E6282B5687E6335AB178573') -ne '1.0.2'){throw 'Legacy official build must remain supported'}
-    if([TappoHelper.SetupWizard]::OfficialVersionForHash('CEDC37D0C11D112F4D933647FB6CF00E1DCA847FC763250984C647080F849080') -ne '1.0.3'){throw 'Updated official build must be supported'}
-    if($null -ne [TappoHelper.SetupWizard]::OfficialVersionForHash(('0'*64))){throw 'Unknown build must remain rejected'}
     if([TappoHelper.SetupWizard]::CheckExecutable($fake).Compatible){throw 'An unsupported file must never pass'}
     if([TappoHelper.SetupWizard]::CheckExecutable((Join-Path $results 'missing.exe')).Compatible){throw 'Missing path must not pass'}
+    $official=Join-Path (Split-Path $PSScriptRoot) '..\WuwaTappo.exe'
+    if(Test-Path -LiteralPath $official){if(-not [TappoHelper.SetupWizard]::CheckExecutable($official).Compatible){throw 'Local signed official update must pass without registering its hash'}}
+    Copy-Item -LiteralPath (Join-Path $env:WINDIR 'System32\WindowsPowerShell\v1.0\powershell.exe') -Destination $fake -Force
+    if([TappoHelper.SetupWizard]::CheckExecutable($fake).Compatible){throw 'Signed executable from another publisher must be rejected'}
+    [IO.File]::WriteAllText($fake,'invalid fixture, not executable')
     $wizard=[TappoHelper.SetupWizard]::new($fake,'')
     try{
         $wizard.add_ValidateRequested({$wizard.SetValidation([TappoHelper.SetupWizard]::CheckExecutable($wizard.SelectedPath))})
         $wizard.Advance();if($wizard.Stage -ne 0){throw 'Invalid path advanced the wizard'}
     }finally{$wizard.Dispose()}
+    $official=Join-Path (Split-Path $PSScriptRoot) '..\WuwaTappo.exe'
+    if(Test-Path -LiteralPath $official){if(-not [TappoHelper.SetupWizard]::CheckExecutable($official).Compatible){throw 'Local signed official update must pass without registering its hash'}}
+    Copy-Item -LiteralPath (Join-Path $env:WINDIR 'System32\WindowsPowerShell\v1.0\powershell.exe') -Destination $fake -Force
+    if([TappoHelper.SetupWizard]::CheckExecutable($fake).Compatible){throw 'Signed executable from another publisher must be rejected'}
+    [IO.File]::WriteAllText($fake,'invalid fixture, not executable')
     $wizard=[TappoHelper.SetupWizard]::new($fake,'')
     try{
         $ok=[TappoHelper.ExecutableCheck]::new();$ok.Compatible=$true;$ok.Message='fixture only'

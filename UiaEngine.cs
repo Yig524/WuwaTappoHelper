@@ -359,11 +359,12 @@ public sealed class Snapshot {
     public long Sequence,UtcTicks;public string Identity="",Error="";public bool Connected,BalanceValid,Busy,Capped;
     public long Balance;public int NodeCount,UnmappedSlots;public Slot Left=new Slot{Side="left"},Right=new Slot{Side="right"};
     public string[] Diagnostics=new string[0];
+    public bool ChestCompatible{get{return UnmappedSlots==0&&Left.State!="ambiguous"&&Right.State!="ambiguous"&&(Left.Present||Right.Present);}}
     public double AgeSeconds{get{return (DateTime.UtcNow.Ticks-UtcTicks)/(double)TimeSpan.TicksPerSecond;}}
 }
 public static class Semantics {
     public static bool Token(string classes,string token){return Array.IndexOf((classes??"").Split(new char[]{' ',';','\t','\r','\n'},StringSplitOptions.RemoveEmptyEntries),token)>=0;}
-    public static bool PermitsInvoke(Snapshot s,string side,string identity){Slot slot=side=="left"?s.Left:side=="right"?s.Right:null;return slot!=null&&s.Connected&&s.Identity==identity&&s.AgeSeconds<=5&&s.BalanceValid&&s.Balance>=1000&&!s.Busy&&slot.Ready&&slot.CanInvoke&&slot.Index>=0;}
+    public static bool PermitsInvoke(Snapshot s,string side,string identity){Slot slot=side=="left"?s.Left:side=="right"?s.Right:null;return slot!=null&&s.ChestCompatible&&s.Connected&&s.Identity==identity&&s.AgeSeconds<=5&&s.BalanceValid&&s.Balance>=1000&&!s.Busy&&slot.Ready&&slot.CanInvoke&&slot.Index>=0;}
     public static Snapshot Evaluate(IEnumerable<Node> rows){
         Snapshot s=new Snapshot();HashSet<long> balances=new HashSet<long>();List<string> debug=new List<string>();bool capped=false;
         foreach(Node n in rows){

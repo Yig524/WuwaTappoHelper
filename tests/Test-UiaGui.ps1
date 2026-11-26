@@ -16,7 +16,7 @@ if($fill.Checked -or $harvest.Checked -or $script:running -or $null -ne $script:
 if($script:session.Peek().Connected){throw 'Background UIA worker must not start before form shown'}
 if($script:dashboard.CountControls() -lt 30){throw 'Missing dashboard controls'}
 if($form.IsHandleCreated){throw 'GUI construction must not register global hotkeys before display'}
-$fixture=[TappoHelper.Snapshot]::new();$fixture.Connected=$true;$fixture.BalanceValid=$true;$fixture.Balance=2000;$fixture.Identity='fixture';$fixture.UtcTicks=[DateTime]::UtcNow.Ticks;$fixture.Left.Ready=$true
+$fixture=[TappoHelper.Snapshot]::new();$fixture.Connected=$true;$fixture.BalanceValid=$true;$fixture.Balance=2000;$fixture.Identity='fixture';$fixture.UtcTicks=[DateTime]::UtcNow.Ticks;$fixture.Left.Ready=$true;$fixture.Left.Present=$true
 [TappoHelper.Session].GetField('latest',[Reflection.BindingFlags]'Instance,NonPublic').SetValue($script:session,$fixture)
 Request-UiaClaim 'left' $false
 if($script:pending -ne 0 -or $script:state.Pending -ge 0 -or $script:inputProtection -ne 'observer_unavailable'){throw 'Automatic claim must defer safely when input cannot be observed'}

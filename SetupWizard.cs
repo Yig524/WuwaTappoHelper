@@ -37,17 +37,20 @@ namespace TappoHelper {
             try{
                 if(String.IsNullOrWhiteSpace(selectedPath)||!File.Exists(selectedPath))return new ExecutableCheck{Message="找不到文件。请选择已经安装的官方 WuwaTappo.exe。"};
                 if(!String.Equals(Path.GetFileName(selectedPath),"WuwaTappo.exe",StringComparison.OrdinalIgnoreCase))return new ExecutableCheck{Message="请选择官方 WuwaTappo.exe，不要选择助手、卸载程序或快捷方式。"};
-                string hash;using(SHA256 sha=SHA256.Create())using(FileStream file=File.OpenRead(selectedPath))hash=BitConverter.ToString(sha.ComputeHash(file)).Replace("-","");
-                string version=OfficialVersionForHash(hash);bool valid=version!=null;
-                return new ExecutableCheck{Compatible=valid,Message=valid?"兼容性校验通过：已核对的官方 "+version+"。":"文件与当前适配版本不一致。暂不支持此版本，请等待适配；不会跳过校验。"};
-            }catch(Exception error){return new ExecutableCheck{Message="无法读取所选文件："+error.Message};}
-        }
-        public static string OfficialVersionForHash(string hash){
-            switch(hash){
-                case "099B62BE14EFE2CC99BB0AD3D37860488C42FB0F4E6282B5687E6335AB178573":return "1.0.2";
-                case "CEDC37D0C11D112F4D933647FB6CF00E1DCA847FC763250984C647080F849080":return "1.0.3";
-                default:return null;
-            }
+                // Let Windows validate Authenticode, including timestamp and certificate trust.
+                // Encode the path as data; never concatenate it into executable script syntax.
+                string encodedPath=Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(Path.GetFullPath(selectedPath)));
+                string script="$ErrorActionPreference='Stop';$s=Get-AuthenticodeSignature -LiteralPath ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('"+encodedPath+"')));if($s.Status -eq 'Valid' -and $null -ne $s.SignerCertificate -and $s.SignerCertificate.GetNameInfo([Security.Cryptography.X509Certificates.X509NameType]::SimpleName,$false) -ceq '广州库洛数界科技有限公司'){[Console]::Write('official-valid')}else{[Console]::Write('signature-rejected')}";
+                string powershell=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),@"WindowsPowerShell\v1.0\powershell.exe");
+                var info=new System.Diagnostics.ProcessStartInfo(powershell,"-NoProfile -NonInteractive -EncodedCommand "+Convert.ToBase64String(System.Text.Encoding.Unicode.GetBytes(script))){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true};
+                using(var process=System.Diagnostics.Process.Start(info)){
+                    var output=process.StandardOutput.ReadToEndAsync();var error=process.StandardError.ReadToEndAsync();
+                    if(!process.WaitForExit(20000)){try{process.Kill();}catch{}return new ExecutableCheck{Message="官方签名校验超时，请检查系统证书或网络后重试。"};}
+                    bool trusted=process.ExitCode==0 && output.Result=="official-valid";
+                    string version=System.Diagnostics.FileVersionInfo.GetVersionInfo(selectedPath).FileVersion;
+                    return new ExecutableCheck{Compatible=trusted,Message=trusted?"官方签名与发布者校验通过（版本 "+version+"）；界面能力将在连接后检查。":"无法确认有效的库洛官方签名。请检查文件来源、系统时间与证书状态。"};
+                }
+            }catch(Exception error){return new ExecutableCheck{Message="无法校验所选文件："+error.Message};}
         }
         public void SetValidation(ExecutableCheck check){PathValidated=check.Compatible;feedback.Text=check.Message;feedback.ForeColor=check.Compatible?Palette.Green:Color.FromArgb(171,67,56);}
         public void SetConnection(bool ready,string message){ConnectionReady=ready;if(Stage==1){feedback.Text=message;feedback.ForeColor=ready?Palette.Green:Palette.Muted;next.Enabled=ready;}}

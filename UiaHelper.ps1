@@ -53,6 +53,7 @@ if($global:ForceSetup -or $null -eq $config -or $config.SetupVersion -ne [TappoH
 . ([scriptblock]::Create([IO.File]::ReadAllText((Join-Path $root 'SmartLogic.ps1'),[Text.Encoding]::UTF8)))
 $script:session=[TappoHelper.Session]::new($exePath)
 $script:activity=$null;$script:running=$false;$script:manualClaim=$false;$script:probe=$null
+$script:sourceRejected=$false;
 $script:keyVerified=$false;$script:identity='';$script:seen=0L;$script:pending=0L;$script:ack=$false
 $script:state=New-SmartState;$script:clock=[Diagnostics.Stopwatch]::StartNew();$script:nextKey=0L;$script:sent=0L
 $script:claimBaseline=$null;$script:autoDiagnostics=0;$script:savePending=$false
@@ -88,6 +89,7 @@ function Update-UiaTray {
     $script:trayHost.SetStatus($text)
 }
 function Get-UsableSnapshot {
+    if($script:sourceRejected){throw '官方程序签名校验未通过，请检查来源后刷新。'}
     $s=$script:session.Peek()
     if(-not $s.Connected -or $s.AgeSeconds -gt 5 -or -not $s.BalanceValid){throw 'UIA尚未提供新鲜、精确的余额；请只读刷新并检查诊断。'}
     return $s
@@ -127,7 +129,7 @@ function Finish-KeyProbe($snapshot){
 }
 function Request-UiaClaim([string]$side,[bool]$manual){
     $s=Get-UsableSnapshot;$slot=if($side -eq 'left'){$s.Left}else{$s.Right}
-    if(-not $slot.Ready -or $s.Busy -or $s.Balance -lt 1000){throw '该侧未就绪、余额不足或正在播放奖励动画，未发起领取。'}
+    if(-not $s.ChestCompatible -or -not $slot.Ready -or $s.Busy -or $s.Balance -lt 1000){throw '该侧未就绪、余额不足或正在播放奖励动画，未发起领取。'}
     if(-not $manual){
         $permission=[TappoHelper.InputGuard]::Assess($script:activity,[TappoHelper.InputGuard]::AutomaticQuietMilliseconds)
         $script:inputProtection=$permission.Reason
@@ -158,7 +160,7 @@ function Toggle-Uia {
     }catch{Stop-Uia $_.Exception.Message}
 }
 function Slot-Description($slot){switch($slot.State){'ready'{'就绪（支持Invoke）'}'cooldown'{"冷却 $($slot.Text)"}'disabled'{'按钮禁用或Invoke不可用'}'ambiguous'{'控件不唯一，禁止领取'}default{'未显示 / 未暴露'}}}
-$refresh.Add_Click({$script:savePending=$true;$script:session.Refresh()})
+$refresh.Add_Click({if($script:sourceRejected){$script:identity=''};$script:savePending=$true;$script:session.Refresh()})
 $testKey.Add_Click({Start-KeyProbe});$testClaim.Add_Click({Start-ManualClaim});$start.Add_Click({Toggle-Uia});$stop.Add_Click({Stop-Uia '已停止全部动作，继续只读观察。'})
 $form.add_ToggleRequested({Toggle-Uia});$form.add_StopRequested({Stop-Uia '快捷键已停止全部动作。'})
 $form.add_RestoreRequested({$script:trayHost.RestoreWindow()})
@@ -177,7 +179,10 @@ $timer.Add_Tick({
         if($s.Connected -and $s.Identity -ne $script:identity){
             if($script:identity -ne ''){Stop-Uia '官方窗口已改变，已停止；需重新验证F24。'}
             $script:identity=$s.Identity;$script:keyVerified=$false
+            $sourceCheck=[TappoHelper.SetupWizard]::CheckExecutable($exePath)
+            $script:sourceRejected=-not $sourceCheck.Compatible
         }
+        if($script:sourceRejected){if($script:running -or $script:manualClaim -or $null -ne $script:probe){Stop-Uia '官方程序签名校验未通过，动作已停止。'};$connection.Text='官方签名校验失败：检查来源、时间与证书状态后点击刷新重试。';return}
         if(-not $s.Connected -or $s.AgeSeconds -gt 5){
             $connection.Text='等待桌宠连接 · 请确认官方桌宠正在运行；可通过“刷新 / 保存诊断”检查。'
             $script:seen=$s.Sequence
@@ -185,7 +190,7 @@ $timer.Add_Tick({
             return
         }
         if($new){
-            $script:seen=$s.Sequence;$connection.Text=if($s.BalanceValid){'已连接官方桌宠 · 数据实时更新'}else{'已连接 · 余额暂不可读，可刷新并保存诊断。'}
+            $script:seen=$s.Sequence;$connection.Text=if($s.BalanceValid){$(if($s.ChestCompatible){'已连接官方桌宠 · 余额、箱子可识别'}else{'已连接 · 余额可读；箱子未显示或不兼容，领取暂缓'})}else{'已连接 · 余额暂不可读，可刷新并保存诊断。'}
             $balanceLabel.Text=if($s.BalanceValid){$s.Balance.ToString('N0')}else{'—'}
             $script:dashboard.SetSnapshot($s)
             if($null -ne $script:activity){
@@ -242,13 +247,15 @@ $timer.Add_Tick({
                 $script:ack=$true;$script:state.BeforeClaim=$result.Before;$script:claimBaseline=$result.Before
             }
             $priorConfirmed=$script:state.Confirmed
-            $confirmationReady=[bool[]]@($s.Left.Ready,$s.Right.Ready)
+            $allowClaims=$s.ChestCompatible -and ($harvest.Checked -or $script:manualClaim)
+            $confirmationReady=[bool[]]@(($allowClaims -and $s.Left.Ready),($allowClaims -and $s.Right.Ready))
             if($script:state.Pending -ge 0){
                 $pendingSlot=if($script:state.Pending -eq 0){$s.Left}else{$s.Right}
                 if($pendingSlot.State -ne 'cooldown' -and -not $s.Busy){$confirmationReady[$script:state.Pending]=$true}
             }
             Update-SmartState $script:state $now $(if($s.BalanceValid){$s.Balance}else{$null}) $confirmationReady
             $status.Text=$script:state.Reason
+            if($harvest.Checked -and -not $s.ChestCompatible -and $script:state.Pending -lt 0){$status.Text+='；箱子未显示或结构异常，领取暂缓。'}
             if($script:state.Confirmed -gt $priorConfirmed){
                 Write-UiaReport 'uia-claim-test.json' @{CompletedAt=[DateTimeOffset]::Now.ToString('o');Verdict='observed_spend_and_slot_change';Before=$script:claimBaseline;After=$s.Balance;Invoke=$result;Left=$s.Left;Right=$s.Right}
                 $script:pending=0L;$script:ack=$false;$script:manualClaim=$false

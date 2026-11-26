@@ -34,6 +34,15 @@ Assert (-not ([TappoHelper.Semantics]::Evaluate([TappoHelper.Node[]]@($capped)))
 $s.Connected=$true;$s.Identity='fixture';$s.UtcTicks=[DateTime]::UtcNow.Ticks
 Assert ([TappoHelper.Semantics]::PermitsInvoke($s,'left','fixture')) 'Fresh valid ready state permits invoke'
 Assert (-not [TappoHelper.Semantics]::PermitsInvoke($s,'left','different')) 'Changed window identity must reject invoke'
+$unmapped=Node 'reward-btn' '' 'new-layout' 15
+$changed=[TappoHelper.Semantics]::Evaluate([TappoHelper.Node[]]@($balance,$left,$unmapped))
+$changed.Connected=$true;$changed.Identity='fixture';$changed.UtcTicks=[DateTime]::UtcNow.Ticks
+Assert ($changed.BalanceValid -and -not $changed.ChestCompatible) 'Unmapped chest must disable claims while leaving exact balance readable'
+Assert (-not [TappoHelper.Semantics]::PermitsInvoke($changed,'left','fixture')) 'Unmapped structure must block even a familiar ready button'
+$duplicate=[TappoHelper.Semantics]::Evaluate([TappoHelper.Node[]]@($balance,$left,$left,$onlyRight))
+Assert (-not $duplicate.ChestCompatible -and $duplicate.BalanceValid) 'Duplicate left slot must disable claims without disabling balance reading'
+$hidden=[TappoHelper.Semantics]::Evaluate([TappoHelper.Node[]]@($balance))
+Assert ($hidden.BalanceValid -and -not $hidden.ChestCompatible) 'Hidden boxes must not be reported as claim-compatible'
 $s.Busy=$true
 Assert (-not [TappoHelper.Semantics]::PermitsInvoke($s,'left','fixture')) 'Busy animation must block invoke'
 $s.Busy=$false;$s.UtcTicks=[DateTime]::UtcNow.AddSeconds(-6).Ticks
