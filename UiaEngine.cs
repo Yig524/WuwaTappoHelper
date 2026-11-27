@@ -271,14 +271,14 @@ sealed class ForegroundFocusObserver:IDisposable {
 public sealed class HelperForm:Form {
     [DllImport("user32.dll",SetLastError=true)]static extern bool RegisterHotKey(IntPtr h,int id,uint modifiers,uint key);
     [DllImport("user32.dll")]static extern bool UnregisterHotKey(IntPtr h,int id);
-    public event Action ToggleRequested,StopRequested,RestoreRequested;
+    public event Action StopRequested,RestoreRequested;
     public bool HotkeysReady{get;private set;}
-    protected override void OnHandleCreated(EventArgs e){base.OnHandleCreated(e);bool a=RegisterHotKey(Handle,1,0x4003,0x77),b=RegisterHotKey(Handle,2,0x4003,0x78);HotkeysReady=a&&b;}
-    protected override void OnHandleDestroyed(EventArgs e){UnregisterHotKey(Handle,1);UnregisterHotKey(Handle,2);base.OnHandleDestroyed(e);}
+    protected override void OnHandleCreated(EventArgs e){base.OnHandleCreated(e);HotkeysReady=RegisterHotKey(Handle,2,0x4003,0x78);}
+    protected override void OnHandleDestroyed(EventArgs e){UnregisterHotKey(Handle,2);base.OnHandleDestroyed(e);}
     protected override void OnShown(EventArgs e){base.OnShown(e);Native.ShowOwnWindow(Handle);}
     protected override void WndProc(ref Message m){
         if(Native.RestoreMessage!=0&&m.Msg==Native.RestoreMessage){Action restore=RestoreRequested;if(restore!=null)restore();}
-        if(m.Msg==0x0312){Action a=m.WParam.ToInt32()==1?ToggleRequested:StopRequested;if(a!=null)a();}base.WndProc(ref m);
+        if(m.Msg==0x0312&&m.WParam.ToInt32()==2){Action a=StopRequested;if(a!=null)a();}base.WndProc(ref m);
     }
 }
 sealed class TrayColors:ProfessionalColorTable {
@@ -296,7 +296,7 @@ public sealed class TrayHost:IDisposable {
     readonly System.Drawing.Font menuFont;
     bool started,disposed,notified,transitioning;
     public bool IsExiting{get;private set;}
-    public event Action ToggleRequested,StopRequested,ExitRequested;
+    public event Action StopRequested,ExitRequested;
     public bool IsHidden{get{return !form.Visible;}}
     public TrayHost(Form owner):this(owner,true){}
     public TrayHost(Form owner,bool publishToShell){
@@ -306,8 +306,7 @@ public sealed class TrayHost:IDisposable {
         menu=new ContextMenuStrip{ShowImageMargin=false,Font=menuFont,Renderer=new ToolStripProfessionalRenderer(new TrayColors()),ForeColor=System.Drawing.Color.FromArgb(29,48,42)};status=new ToolStripMenuItem("状态：只读观察");status.Enabled=false;menu.Items.Add(status);
         menu.Items.Add(new ToolStripSeparator());
         ToolStripMenuItem show=new ToolStripMenuItem("显示窗口");show.Click+=delegate{RestoreWindow();};menu.Items.Add(show);
-        ToolStripMenuItem toggle=new ToolStripMenuItem("开始 / 暂停");toggle.Click+=delegate{Action a=ToggleRequested;if(a!=null)a();};menu.Items.Add(toggle);
-        ToolStripMenuItem stop=new ToolStripMenuItem("停止全部动作");stop.Click+=delegate{Action a=StopRequested;if(a!=null)a();};menu.Items.Add(stop);
+        ToolStripMenuItem stop=new ToolStripMenuItem("关闭全部任务");stop.Click+=delegate{Action a=StopRequested;if(a!=null)a();};menu.Items.Add(stop);
         menu.Items.Add(new ToolStripSeparator());
         ToolStripMenuItem exit=new ToolStripMenuItem("退出程序");exit.Click+=delegate{Exit();};menu.Items.Add(exit);
         icon=new NotifyIcon{Icon=image,Text="Wuwa Tappo 助手 · 只读观察",ContextMenuStrip=menu};

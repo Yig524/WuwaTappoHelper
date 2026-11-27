@@ -17,8 +17,17 @@ function Update-SmartState($s, [long]$now, $balance, [bool[]]$ready, [long]$rese
     if ($null -eq $balance) {
         $s.InvalidReads++
         $s.RecoveryReads = 0; $s.ReadyRuns = @(0,0)
+        if ($s.Pending -ge 0) {
+            $slot = $s.Pending
+            $s.Pending = -1
+            $s.RetryAfter[$slot] = $now + 30000
+            $s.LastBalance = $null
+            $s.SentSinceObservation = 0
+            $s.NoProgress = 0
+            $s.Reason = '领取期间读数丢失，已暂缓30秒防重复领取，读取恢复后自动继续'
+            return
+        }
         $s.Reason = '暂时无法读取余额，暂缓动作，读取恢复后自动继续'
-        if ($s.Pending -ge 0) { $s.Action = 'stop'; $s.Reason = '领取期间读数丢失，结果无法确认，请核对后重新开始' }
         return
     }
     if ($s.InvalidReads -gt 0) {
@@ -44,14 +53,19 @@ function Update-SmartState($s, [long]$now, $balance, [bool[]]$ready, [long]$rese
             $s.NoProgress = 0
             $s.Reason = '已观察到余额扣除及箱子消失，等待奖励动画结束'
         } elseif ($spent -gt 1100 -or $balance -gt $s.BeforeClaim + 20) {
-            $s.Action = 'stop'; $s.Reason = '领取期间余额出现意外变化，请核对官方界面'
+            $s.Pending = -1
+            $s.RetryAfter[$slot] = $now + 30000
+            $s.NoProgress = 0
+            $s.Reason = '领取期间余额出现意外变化，已重设基线并等待30秒后继续'
         } elseif ($now - $s.PendingSince -ge 15000) {
             $s.FailedClaims[$slot]++
             $s.Pending = -1
             $s.RetryAfter[$slot] = $now + 30000
             $s.Reason = '未观察到领取结果，等待30秒后重新识别'
             if ($s.FailedClaims[$slot] -ge 2) {
-                $s.Action = 'stop'; $s.Reason = '同一槽位连续两次领取未得到界面确认，请检查登录和网络'
+                $s.FailedClaims[$slot] = 0
+                $s.RetryAfter[$slot] = $now + 60000
+                $s.Reason = '同一槽位连续两次领取未获确认，暂缓60秒后重试'
             }
         } else { $s.Reason = '等待官方界面确认领取；此时不发送其他点击' }
         $s.LastBalance = $balance
@@ -62,15 +76,27 @@ function Update-SmartState($s, [long]$now, $balance, [bool[]]$ready, [long]$rese
     if ($null -ne $s.LastBalance) {
         $gain = $balance - $s.LastBalance
         if ($gain -lt 0) {
-            $s.Action = 'stop'; $s.Reason = '未发起领取但余额下降，请重新核对界面读数'; return
+            if ($gain -le -900) { $s.HoldUntil = [Math]::Max($s.HoldUntil, $now + 8000) }
+            $s.LastBalance = $balance
+            $s.SentSinceObservation = 0
+            $s.NoProgress = 0
+            $s.LastReady = $ready
+            $s.Reason = '检测到余额下降，已自动同步新基线并继续'
+            return
         }
         if ($s.SentSinceObservation -gt 0) {
             if ($gain -eq 0) { $s.NoProgress++ } else { $s.NoProgress = 0 }
             if ($s.NoProgress -ge 3) {
-                $s.Action = 'stop'; $s.Reason = '连续三轮点击未使官方余额增加，已停止'; return
+                $s.NoProgress = 0
+                $s.HoldUntil = [Math]::Max($s.HoldUntil, $now + 5000)
+                $s.LastBalance = $balance
+                $s.SentSinceObservation = 0
+                $s.LastReady = $ready
+                $s.Reason = '连续多轮补充未见余额增加，暂缓5秒后继续观察'
+                return
             }
             if ($gain -gt $s.SentSinceObservation * 3 + 20) {
-                $s.Action = 'stop'; $s.Reason = '余额增量异常，可能识别错误，请重新标定'; return
+                $s.NoProgress = 0
             }
         }
     }

@@ -109,12 +109,25 @@ Assert ($recover.Action -eq 'tap' -and $recover.LastBalance -eq 505 -and $recove
 Update-SmartState $recover 15000 $null @($false,$false)
 Update-SmartState $recover 16000 100 @($false,$false)
 Update-SmartState $recover 17000 100 @($false,$false)
-Assert ($recover.Action -eq 'stop') 'Unexpected spend across a reading gap must still stop'
+Assert ($recover.Action -eq 'wait' -and $recover.LastBalance -eq 100) 'Balance drop outside claim must re-baseline and wait without stopping automation'
+Update-SmartState $recover 18000 1500 @($false,$false)
+Update-SmartState $recover 19000 500 @($false,$false)
+Assert ($recover.Action -eq 'wait' -and $recover.LastBalance -eq 500 -and $recover.HoldUntil -eq 27000) 'Chest-sized balance drop outside claim must re-baseline and hold 8s without stopping'
+$recover.SentSinceObservation=5
+Update-SmartState $recover 28000 500 @($false,$false)
+$recover.SentSinceObservation=5
+Update-SmartState $recover 29000 500 @($false,$false)
+$recover.SentSinceObservation=5
+Update-SmartState $recover 30000 500 @($false,$false)
+Assert ($recover.Action -eq 'wait' -and $recover.HoldUntil -eq 35000 -and $recover.NoProgress -eq 0) 'Repeated no-progress rounds must back off briefly instead of stopping'
+$recover.SentSinceObservation=1
+Update-SmartState $recover 36000 700 @($false,$false)
+Assert ($recover.Action -eq 'tap' -and $recover.LastBalance -eq 700) 'Unexpected positive gain must continue without stopping'
 $pendingGap=New-SmartState
 Update-SmartState $pendingGap 0 2000 @($true,$true)
 Start-SmartClaim $pendingGap 0 0
 Update-SmartState $pendingGap 1000 $null @($false,$false)
-Assert ($pendingGap.Action -eq 'stop' -and $pendingGap.Pending -eq 0) 'Missing claim confirmation must never be auto-retried'
+Assert ($pendingGap.Action -eq 'wait' -and $pendingGap.Pending -eq -1 -and $pendingGap.RetryAfter[0] -eq 31000) 'Missing claim confirmation must never be auto-retried and must not stop automation'
 Update-SmartState $cycle 0 2000 @($true,$true)
 Update-SmartState $cycle 1000 2000 @($true,$true)
 Assert ($cycle.Action -eq 'claim0') 'Automatic cycle starts with one stable ready chest'

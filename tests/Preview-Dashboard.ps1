@@ -16,10 +16,10 @@ $form=[DashboardPreviewForm]::new();$dashboard=[TappoHelper.DashboardView]::new(
 $form.StartPosition='Manual';$form.Location=[Drawing.Point]::new(-32000,-32000);$form.ShowInTaskbar=$false
 try {
     $dashboard.Balance.Text='1,680';$dashboard.Connection.Text='已连接官方桌宠 · 数据实时更新'
-    $snapshot=[TappoHelper.Snapshot]::new();$snapshot.Left.State='ready';$snapshot.Right.State='cooldown';$snapshot.Right.Text='12:34';$dashboard.SetSnapshot($snapshot)
-    $dashboard.Status.Text='准备好了。选择自动任务后，点击开始运行。'
+    $snapshot=[TappoHelper.Snapshot]::new();$snapshot.BalanceValid=$true;$snapshot.Balance=1680;$snapshot.Left.State='ready';$snapshot.Right.State='cooldown';$snapshot.Right.Text='12:34';$dashboard.SetSnapshot($snapshot)
+    $dashboard.Status.Text='常开模式：开启上方自动开关后即持续运行。'
     $dashboard.Stats.Text='F24 已通过  ·  补充 120 次  ·  已确认领取 2 次'
-    $dashboard.Fill.Checked=$true;$dashboard.Harvest.Checked=$true;$dashboard.SetMode($false,$false,$false,$false,$true,$true)
+    $dashboard.Fill.Checked=$true;$dashboard.Harvest.Checked=$true;$dashboard.SetMode($true,$false,$false,$false,$true,$true)
     $form.Show();$form.PerformLayout();[Windows.Forms.Application]::DoEvents()
     if($Compact){$factor=$form.ClientSize.Width/920.0;$form.ClientSize=[Drawing.Size]::new([int](760*$factor),[int](540*$factor));$form.PerformLayout();[Windows.Forms.Application]::DoEvents();if(-not $form.Controls[0].VerticalScroll.Visible){throw 'Compact window must allow scrolling to verification tools'}}
     $bitmap=[Drawing.Bitmap]::new($form.ClientSize.Width,$form.ClientSize.Height)

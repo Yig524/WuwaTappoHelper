@@ -12,28 +12,41 @@ $source=$source.Replace("Write-UiaStartup 'begin'",'').Replace("Write-UiaStartup
 $source=$source.Replace('[void][TappoHelper.Native]::DetachOwnConsole()','')
 $end=$source.IndexOf('$form.Add_Shown')
 $checks=@'
-if($fill.Checked -or $harvest.Checked -or $script:running -or $null -ne $script:activity){throw 'GUI must not enable input or hooks before explicit startup'}
+if($fill.Checked -or $harvest.Checked -or $null -ne $script:activity){throw 'GUI must not enable input or hooks before explicit startup'}
 if($script:session.Peek().Connected){throw 'Background UIA worker must not start before form shown'}
 if($script:dashboard.CountControls() -lt 30){throw 'Missing dashboard controls'}
 if($form.IsHandleCreated){throw 'GUI construction must not register global hotkeys before display'}
 # Exercise the actual production timer with synthetic snapshots only.
-$script:identity='fixture';$script:running=$true;$script:sourceRejected=$false
+$script:identity='fixture';$harvest.Checked=$true;$script:sourceRejected=$false
 $tick=[Windows.Forms.Timer].GetMethod('OnTick',[Reflection.BindingFlags]'Instance,NonPublic')
 $latestField=[TappoHelper.Session].GetField('latest',[Reflection.BindingFlags]'Instance,NonPublic')
 for($i=1;$i -le 4;$i++){
     $unreadable=[TappoHelper.Snapshot]::new();$unreadable.Sequence=$i;$unreadable.UtcTicks=[DateTime]::UtcNow.Ticks
     $latestField.SetValue($script:session,$unreadable);$tick.Invoke($timer,@([EventArgs]::Empty))
-    if(-not $script:running -or $script:state.Action -ne 'wait'){throw 'Transient UIA loss must retain running intent with all actions suspended'}
+    if(-not $harvest.Checked -or $script:state.Action -ne 'wait'){throw 'Transient UIA loss must retain enabled task with all actions suspended'}
 }
 $recovered=[TappoHelper.Snapshot]::new();$recovered.Connected=$true;$recovered.BalanceValid=$true;$recovered.Identity='fixture';$recovered.Balance=500
 for($i=5;$i -le 6;$i++){
     $recovered.Sequence=$i;$recovered.UtcTicks=[DateTime]::UtcNow.Ticks
     $latestField.SetValue($script:session,$recovered);$tick.Invoke($timer,@([EventArgs]::Empty))
-    if(-not $script:running){throw 'Same-window recovery must not disable automation'}
+    if(-not $harvest.Checked){throw 'Same-window recovery must not disable automation'}
     if($i -eq 5 -and $script:state.RecoveryReads -ne 1){throw 'First fresh sample must remain in recovery'}
 }
 if($script:state.InvalidReads -ne 0){throw 'Two fresh samples must finish recovery'}
-$script:running=$false;$script:state=New-SmartState;$script:inputProtection=''
+# Balance drop and non-invoked claim result must recover cleanly without unchecking tasks.
+$script:state.LastBalance=2000;$recovered.Balance=1000;$recovered.Sequence=7;$recovered.UtcTicks=[DateTime]::UtcNow.Ticks
+$latestField.SetValue($script:session,$recovered);$tick.Invoke($timer,@([EventArgs]::Empty))
+if(-not $harvest.Checked -or $script:state.LastBalance -ne 1000){throw 'Balance decrease must re-baseline without disabling always-on tasks'}
+$script:pending=99;$script:ack=$false;$script:state.Pending=0
+$rejectedResult=[TappoHelper.InvokeResult]::new();$rejectedResult.Id=99;$rejectedResult.Status='rejected';$rejectedResult.Error='Fresh UIA state does not permit this claim'
+[TappoHelper.Session].GetField('result',[Reflection.BindingFlags]'Instance,NonPublic').SetValue($script:session,$rejectedResult)
+$recovered.Sequence=8;$recovered.UtcTicks=[DateTime]::UtcNow.Ticks
+$latestField.SetValue($script:session,$recovered);$tick.Invoke($timer,@([EventArgs]::Empty))
+if(-not $harvest.Checked -or $script:pending -ne 0 -or $script:state.Pending -ge 0){throw 'Rejected automatic claim must back off without disabling always-on tasks'}
+Stop-Uia 'test-stop'
+if($fill.Checked -or $harvest.Checked){throw 'Explicit stop must turn off both task switches'}
+[TappoHelper.Session].GetField('result',[Reflection.BindingFlags]'Instance,NonPublic').SetValue($script:session,$null)
+$script:state=New-SmartState;$script:inputProtection=''
 $fixture=[TappoHelper.Snapshot]::new();$fixture.Connected=$true;$fixture.BalanceValid=$true;$fixture.Balance=2000;$fixture.Identity='fixture';$fixture.UtcTicks=[DateTime]::UtcNow.Ticks;$fixture.Left.Ready=$true;$fixture.Left.Present=$true
 [TappoHelper.Session].GetField('latest',[Reflection.BindingFlags]'Instance,NonPublic').SetValue($script:session,$fixture)
 Request-UiaClaim 'left' $false
