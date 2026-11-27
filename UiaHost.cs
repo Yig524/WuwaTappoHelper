@@ -14,7 +14,7 @@ using System.Windows.Forms;
 [assembly:AssemblyTitle("Wuwa Tappo Helper")]
 [assembly:AssemblyProduct("Wuwa Tappo Helper")]
 [assembly:AssemblyDescription("Desktop pet companion helper")]
-[assembly:AssemblyVersion("1.3.0.0")]
+[assembly:AssemblyVersion("1.3.1.0")]
 
 internal static class UiaHost {
     [DllImport("kernel32.dll")] static extern IntPtr GetConsoleWindow();

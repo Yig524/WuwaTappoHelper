@@ -1,4 +1,4 @@
-# Pure decision logic. All balances come from the official visible UI.
+﻿# Pure decision logic. All balances come from the official visible UI.
 function Get-SmartPermittedAction([string]$action,[bool]$daily,[double]$idleSeconds) {
     if ($daily -and ($action -eq 'tap' -or ($action -match '^claim[01]$' -and $idleSeconds -lt 10))) {return 'wait'}
     return $action
@@ -8,7 +8,7 @@ function New-SmartState {
         LastBalance = $null; ReadyRuns = @(0,0); Pending = -1; PendingSince = 0L
         BeforeClaim = 0L; HoldUntil = 0L; CooldownUntil = @(0L,0L)
         SentSinceObservation = 0; NoProgress = 0; Confirmed = 0; FailedClaims = @(0,0)
-        RetryAfter = @(0L,0L); LastObservation = -1L; InvalidReads = 0
+        RetryAfter = @(0L,0L); LastObservation = -1L; InvalidReads = 0; RecoveryReads = 0
         Action = 'observe'; Reason = '等待识别官方余额'; LastReady = @($false,$false)
     }
 }
@@ -16,11 +16,17 @@ function Update-SmartState($s, [long]$now, $balance, [bool[]]$ready, [long]$rese
     $s.Action = 'wait'
     if ($null -eq $balance) {
         $s.InvalidReads++
-        $s.Reason = '无法可靠识别余额，暂停发送输入'
-        if ($s.InvalidReads -ge 3) { $s.Action = 'stop' }
+        $s.RecoveryReads = 0; $s.ReadyRuns = @(0,0)
+        $s.Reason = '暂时无法读取余额，暂缓动作，读取恢复后自动继续'
+        if ($s.Pending -ge 0) { $s.Action = 'stop'; $s.Reason = '领取期间读数丢失，结果无法确认，请核对后重新开始' }
         return
     }
+    if ($s.InvalidReads -gt 0) {
+        $s.RecoveryReads++
+        if ($s.RecoveryReads -lt 2) { $s.Reason = '读取已恢复，等待第二次有效读数确认后继续'; return }
+    }
     $s.InvalidReads = 0
+    $s.RecoveryReads = 0
     $balance = [long]$balance
     $s.LastObservation = $now
     for ($i=0; $i -lt 2; $i++) {

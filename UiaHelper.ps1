@@ -1,4 +1,4 @@
-$ErrorActionPreference='Stop'
+﻿$ErrorActionPreference='Stop'
 $root=(Get-Location).Path
 function Write-UiaStartup([string]$text){
     $dir=Join-Path $root 'diagnostics';[void][IO.Directory]::CreateDirectory($dir)
@@ -74,6 +74,7 @@ function Write-UiaReport([string]$name,$data){
 }
 function Stop-Uia([string]$reason){
     Write-UiaStartup ('state: '+$reason)
+    Write-UiaReport 'last-stop.json' @{At=[DateTimeOffset]::Now.ToString('o');Reason=$reason;WasRunning=$script:running;Pending=$script:pending;Decision=$script:state;Snapshot=$script:session.Peek()}
     if($null -ne $script:probe){Write-UiaReport 'f24-test.json' @{CompletedAt=[DateTimeOffset]::Now.ToString('o');Verdict='stopped';Reason=$reason;Sent=$script:probe.Sent}}
     $script:running=$false;$script:manualClaim=$false;$script:probe=$null;$script:pending=0L;$script:ack=$false
     $script:inputProtection=''
@@ -82,7 +83,7 @@ function Stop-Uia([string]$reason){
 }
 function Update-UiaTray {
     if($null -eq $script:trayHost -or $script:trayHost.IsExiting){return}
-    $text=if($null -ne $script:probe){'F24验证中'}elseif($script:manualClaim){'验证单箱领取中'}elseif($script:running -and $script:inputProtection -ne ''){'输入避让中'}elseif($script:running){'自动运行中'}else{'已停止 / 只读观察'}
+    $text=if($null -ne $script:probe){'F24验证中'}elseif($script:manualClaim){'验证单箱领取中'}elseif($script:running -and $script:state.InvalidReads -gt 0){'读取暂缓中'}elseif($script:running -and $script:inputProtection -ne ''){'输入避让中'}elseif($script:running){'自动运行中'}else{'已停止 / 只读观察'}
     $snapshot=$script:session.Peek()
     $script:dashboard.SetMode($script:running,($script:inputProtection -ne ''),($null -ne $script:probe),$script:manualClaim,($snapshot.Connected -and $snapshot.AgeSeconds -le 5),$script:keyVerified)
     if($snapshot.Connected -and $snapshot.BalanceValid){$text+=' · 余额 '+$snapshot.Balance}
@@ -183,10 +184,15 @@ $timer.Add_Tick({
             $script:sourceRejected=-not $sourceCheck.Compatible
         }
         if($script:sourceRejected){if($script:running -or $script:manualClaim -or $null -ne $script:probe){Stop-Uia '官方程序签名校验未通过，动作已停止。'};$connection.Text='官方签名校验失败：检查来源、时间与证书状态后点击刷新重试。';return}
-        if(-not $s.Connected -or $s.AgeSeconds -gt 5){
-            $connection.Text='等待桌宠连接 · 请确认官方桌宠正在运行；可通过“刷新 / 保存诊断”检查。'
+        if(-not $s.Connected -or $s.AgeSeconds -gt 5 -or -not $s.BalanceValid){
+            $connection.Text='读取暂缓 · 等待同一官方窗口提供新鲜、精确的余额。'
+            $balanceLabel.Text='—'
+            if($script:manualClaim -or $null -ne $script:probe -or $script:pending -gt 0 -or $script:state.Pending -ge 0){Stop-Uia '验证或领取期间读数丢失，结果无法确认，已停止；请重新核对。'}
+            elseif($script:running){
+                if($new -or $script:state.InvalidReads -eq 0){Update-SmartState $script:state $now $null ([bool[]]@($false,$false))}
+                $script:inputProtection='';$status.Text=$script:state.Reason
+            }
             $script:seen=$s.Sequence
-            if($script:running -or $script:manualClaim -or $null -ne $script:probe){Stop-Uia 'UIA连接丢失或数据过期，已停止输入。'}
             return
         }
         if($new){

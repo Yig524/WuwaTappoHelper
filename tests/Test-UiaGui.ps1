@@ -16,6 +16,24 @@ if($fill.Checked -or $harvest.Checked -or $script:running -or $null -ne $script:
 if($script:session.Peek().Connected){throw 'Background UIA worker must not start before form shown'}
 if($script:dashboard.CountControls() -lt 30){throw 'Missing dashboard controls'}
 if($form.IsHandleCreated){throw 'GUI construction must not register global hotkeys before display'}
+# Exercise the actual production timer with synthetic snapshots only.
+$script:identity='fixture';$script:running=$true;$script:sourceRejected=$false
+$tick=[Windows.Forms.Timer].GetMethod('OnTick',[Reflection.BindingFlags]'Instance,NonPublic')
+$latestField=[TappoHelper.Session].GetField('latest',[Reflection.BindingFlags]'Instance,NonPublic')
+for($i=1;$i -le 4;$i++){
+    $unreadable=[TappoHelper.Snapshot]::new();$unreadable.Sequence=$i;$unreadable.UtcTicks=[DateTime]::UtcNow.Ticks
+    $latestField.SetValue($script:session,$unreadable);$tick.Invoke($timer,@([EventArgs]::Empty))
+    if(-not $script:running -or $script:state.Action -ne 'wait'){throw 'Transient UIA loss must retain running intent with all actions suspended'}
+}
+$recovered=[TappoHelper.Snapshot]::new();$recovered.Connected=$true;$recovered.BalanceValid=$true;$recovered.Identity='fixture';$recovered.Balance=500
+for($i=5;$i -le 6;$i++){
+    $recovered.Sequence=$i;$recovered.UtcTicks=[DateTime]::UtcNow.Ticks
+    $latestField.SetValue($script:session,$recovered);$tick.Invoke($timer,@([EventArgs]::Empty))
+    if(-not $script:running){throw 'Same-window recovery must not disable automation'}
+    if($i -eq 5 -and $script:state.RecoveryReads -ne 1){throw 'First fresh sample must remain in recovery'}
+}
+if($script:state.InvalidReads -ne 0){throw 'Two fresh samples must finish recovery'}
+$script:running=$false;$script:state=New-SmartState;$script:inputProtection=''
 $fixture=[TappoHelper.Snapshot]::new();$fixture.Connected=$true;$fixture.BalanceValid=$true;$fixture.Balance=2000;$fixture.Identity='fixture';$fixture.UtcTicks=[DateTime]::UtcNow.Ticks;$fixture.Left.Ready=$true;$fixture.Left.Present=$true
 [TappoHelper.Session].GetField('latest',[Reflection.BindingFlags]'Instance,NonPublic').SetValue($script:session,$fixture)
 Request-UiaClaim 'left' $false

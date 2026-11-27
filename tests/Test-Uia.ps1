@@ -95,6 +95,26 @@ try{
 }finally{$session.Dispose()}
 . ([scriptblock]::Create([IO.File]::ReadAllText((Join-Path $root 'SmartLogic.ps1'),[Text.Encoding]::UTF8)))
 $cycle=New-SmartState
+$recover=New-SmartState
+Update-SmartState $recover 0 500 @($false,$false)
+$recover.SentSinceObservation=5
+for($i=1;$i -le 10;$i++){Update-SmartState $recover ($i*1000) $null @($false,$false);Assert ($recover.Action -eq 'wait') 'Repeated missing observations must wait without disabling automation'}
+Update-SmartState $recover 11000 505 @($false,$false)
+Assert ($recover.Action -eq 'wait' -and $recover.SentSinceObservation -eq 5) 'First recovered reading must wait and retain unacknowledged inputs'
+Update-SmartState $recover 12000 $null @($false,$false)
+Update-SmartState $recover 13000 505 @($false,$false)
+Assert ($recover.Action -eq 'wait') 'Intermittent recovery must not resume on a single valid reading'
+Update-SmartState $recover 14000 505 @($false,$false)
+Assert ($recover.Action -eq 'tap' -and $recover.LastBalance -eq 505 -and $recover.NoProgress -eq 0) 'Two fresh readings resume and retain feedback accounting'
+Update-SmartState $recover 15000 $null @($false,$false)
+Update-SmartState $recover 16000 100 @($false,$false)
+Update-SmartState $recover 17000 100 @($false,$false)
+Assert ($recover.Action -eq 'stop') 'Unexpected spend across a reading gap must still stop'
+$pendingGap=New-SmartState
+Update-SmartState $pendingGap 0 2000 @($true,$true)
+Start-SmartClaim $pendingGap 0 0
+Update-SmartState $pendingGap 1000 $null @($false,$false)
+Assert ($pendingGap.Action -eq 'stop' -and $pendingGap.Pending -eq 0) 'Missing claim confirmation must never be auto-retried'
 Update-SmartState $cycle 0 2000 @($true,$true)
 Update-SmartState $cycle 1000 2000 @($true,$true)
 Assert ($cycle.Action -eq 'claim0') 'Automatic cycle starts with one stable ready chest'
